@@ -1,0 +1,16 @@
+name: Keep Hugging Face Space Awake
+
+on:
+  schedule:
+    # Run once every hour (at minute 0)
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allows you to trigger it manually from GitHub for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API Tables Endpoint
+        run: |
+          curl -s https://rbrodbeck-turn-table-api.hf.space/api/tables > /dev/null
+          echo "Pinged TurnTable API successfully at $(date)"
