@@ -34,18 +34,18 @@ public class Program
         // Register SignalR Services
         builder.Services.AddSignalR();
 
-        // 3. Configure CORS to allow frontend SPAs (ex: React Vite on localhost)
+        // 3. Configure CORS to allow frontend SPAs (Vercel and Localhost)
         builder.Services.AddCors(options =>
         {
             options.AddPolicy("AllowFrontendApp", policy =>
             {
-                policy.WithOrigins(
-                    "http://localhost:5173", // default Vite React port
-                    "http://localhost:3000"  // alternative React dev port
-                )
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
+                policy.SetIsOriginAllowed(origin => 
+                    origin.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase) || 
+                    origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase) || 
+                    origin.StartsWith("http://127.0.0.1:", StringComparison.OrdinalIgnoreCase))
+                      .AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .AllowCredentials(); // Required for SignalR websockets
             });
         });
 
