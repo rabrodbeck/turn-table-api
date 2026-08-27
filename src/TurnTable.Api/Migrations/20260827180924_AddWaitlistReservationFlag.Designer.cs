@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TurnTable.Api.Data;
@@ -11,9 +12,11 @@ using TurnTable.Api.Data;
 namespace TurnTable.Api.Migrations
 {
     [DbContext(typeof(TurnTableDbContext))]
-    partial class TurnTableDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260827180924_AddWaitlistReservationFlag")]
+    partial class AddWaitlistReservationFlag
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

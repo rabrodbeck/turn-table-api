@@ -20,6 +20,7 @@ public class TurnTableDbContext : DbContext
     public DbSet<Server> Servers { get; set; } = null!;
     public DbSet<WaitlistEntry> WaitlistEntries { get; set; } = null!;
     public DbSet<RotationQueueItem> RotationQueue { get; set; } = null!;
+    public DbSet<Reservation> Reservations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +31,7 @@ public class TurnTableDbContext : DbContext
         modelBuilder.Entity<Server>().HasKey(s => s.Id);
         modelBuilder.Entity<WaitlistEntry>().HasKey(w => w.Id);
         modelBuilder.Entity<RotationQueueItem>().HasKey(r => r.Id);
+        modelBuilder.Entity<Reservation>().HasKey(r => r.Id);
 
         // 2. Seed Static Table Metadata (Empty/Available layout)
         modelBuilder.Entity<Table>().HasData(

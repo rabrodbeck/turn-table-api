@@ -55,10 +55,24 @@ public class DbTurnTableStore : ITurnTableService
         // Link waitlist party if provided
         if (!string.IsNullOrEmpty(dto.WaitlistId))
         {
-            var waitlistEntry = await _context.WaitlistEntries.FirstOrDefaultAsync(w => w.Id == dto.WaitlistId) ?? throw new NotFoundException($"Waitlist party '{dto.WaitlistId}' not found.");
-
-            waitlistEntry.Status = "seated";
-            table.PartyName = waitlistEntry.PartyName;
+            if (dto.WaitlistId.StartsWith("res-", StringComparison.OrdinalIgnoreCase))
+            {
+                var reservation = await _context.Reservations.FirstOrDefaultAsync(r => r.Id == dto.WaitlistId);
+                if (reservation != null)
+                {
+                    reservation.Status = "seated";
+                    table.PartyName = reservation.PartyName; // <-- Added this line
+                }
+            }
+            else
+            {
+                var waitlistEntry = await _context.WaitlistEntries.FirstOrDefaultAsync(w => w.Id == dto.WaitlistId);
+                if (waitlistEntry != null)
+                {
+                    waitlistEntry.Status = "seated";
+                    table.PartyName = waitlistEntry.PartyName; // <-- Added this line
+                }
+            }
         }
         else
         {
@@ -358,7 +372,96 @@ public class DbTurnTableStore : ITurnTableService
         var queueItems = await _context.RotationQueue.ToListAsync();
         _context.RotationQueue.RemoveRange(queueItems);
 
+        // 5. Cancel/No-Show today's leftover booked reservations
+        var todayUtc = DateTimeOffset.UtcNow.Date;
+        var todayStart = new DateTimeOffset(todayUtc, TimeSpan.Zero);
+        var todayEnd = todayStart.AddDays(1).AddTicks(-1);
+        var leftoverReservations = await _context.Reservations
+            .Where(r => r.ReservationTime >= todayStart && 
+                        r.ReservationTime <= todayEnd && 
+                        r.Status == "booked")
+            .ToListAsync();
+        
+        foreach (var res in leftoverReservations)
+        {
+            res.Status = "no_show";
+        }
+
         await _context.SaveChangesAsync();
+    }
+
+    #endregion
+
+    #region Reservations Implementation
+
+    public async Task<IEnumerable<ReservationDto>> GetTodayReservationsAsync()
+    {
+        var todayUtc = DateTimeOffset.UtcNow.Date;
+        var todayStart = new DateTimeOffset(todayUtc, TimeSpan.Zero);
+        var todayEnd = todayStart.AddDays(1).AddTicks(-1);
+
+        var list = await _context.Reservations
+            .Where(r => r.ReservationTime >= todayStart && 
+                        r.ReservationTime <= todayEnd && 
+                        (r.Status == "booked" || r.Status == "no_show"))
+            .OrderBy(r => r.ReservationTime)
+            .ToListAsync();
+
+        return list.Select(MapToReservationDto);
+    }
+
+    public async Task<ReservationDto> UpdateReservationStatusAsync(string reservationId, string status)
+    {
+        var res = await _context.Reservations.FirstOrDefaultAsync(r => r.Id == reservationId)
+            ?? throw new NotFoundException($"Reservation '{reservationId}' not found.");
+        res.Status = status.ToLowerInvariant();
+        await _context.SaveChangesAsync();
+        return MapToReservationDto(res);
+    }
+
+    public async Task<ReservationDto> AddReservationAsync(CreateReservationDto dto)
+    {
+        var count = await _context.Reservations.CountAsync();
+        var res = new Reservation
+        {
+            Id = $"res-{count + 101}",
+            PartyName = dto.PartyName,
+            PartySize = dto.PartySize,
+            PhoneNumber = dto.PhoneNumber,
+            ReservationTime = dto.ReservationTime,
+            Status = "booked"
+        };
+
+        _context.Reservations.Add(res);
+        await _context.SaveChangesAsync();
+
+        return MapToReservationDto(res);
+    }
+
+    public async Task<WaitlistEntryDto> MoveReservationToWaitlistAsync(string reservationId)
+    {
+        var res = await _context.Reservations.FirstOrDefaultAsync(r => r.Id == reservationId)
+            ?? throw new NotFoundException($"Reservation '{reservationId}' not found.");
+
+        res.Status = "canceled"; // Remove from reservation list
+
+        var count = await _context.WaitlistEntries.CountAsync();
+        var entry = new WaitlistEntry
+        {
+            Id = $"wt-{count + 201}",
+            PartyName = res.PartyName,
+            PartySize = res.PartySize,
+            PhoneNumber = res.PhoneNumber,
+            CheckedInAt = DateTimeOffset.UtcNow,
+            QuotedWaitInMinutes = 0,
+            IsReservationArrival = true, // priority flag
+            Status = "waiting"
+        };
+
+        _context.WaitlistEntries.Add(entry);
+        await _context.SaveChangesAsync();
+
+        return MapToWaitlistDto(entry);
     }
 
     #endregion
@@ -595,7 +698,8 @@ public class DbTurnTableStore : ITurnTableService
             PhoneNumber = entry.PhoneNumber,
             CheckedInAt = entry.CheckedInAt,
             QuotedWaitInMinutes = entry.QuotedWaitInMinutes,
-            Status = entry.Status
+            Status = entry.Status,
+            IsReservationArrival = entry.IsReservationArrival
         };
     }
     private static ServerDto MapToServerDto(Server server)
@@ -608,5 +712,19 @@ public class DbTurnTableStore : ITurnTableService
             Section = server.Section
         };
     }
+
+    private static ReservationDto MapToReservationDto(Reservation r)
+    {
+        return new ReservationDto
+        {
+            Id = r.Id,
+            PartyName = r.PartyName,
+            PartySize = r.PartySize,
+            PhoneNumber = r.PhoneNumber,
+            ReservationTime = r.ReservationTime,
+            Status = r.Status
+        };
+    }
+
     #endregion
 }

@@ -16,6 +16,7 @@ public class InMemoryTurnTableStore : ITurnTableService
     private readonly List<Server> _servers = new();
     private readonly List<WaitlistEntry> _waitlist = new();
     private readonly List<string> _rotationQueue = new();
+    private readonly List<Reservation> _reservations = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InMemoryTurnTableStore"/> class and seeds default restaurant layout configurations.
@@ -158,19 +159,31 @@ public class InMemoryTurnTableStore : ITurnTableService
             table.ServerId = server.Id;
             table.SeatedAt = DateTimeOffset.UtcNow;
 
-            // Optional waitlist correlation
+            // Optional waitlist or reservation correlation
             if (!string.IsNullOrEmpty(dto.WaitlistId))
             {
-                var waitlistEntry = _waitlist.FirstOrDefault(w => w.Id == dto.WaitlistId)
-                    ?? throw new NotFoundException($"Waitlist entry '{dto.WaitlistId}' not found.");
-
-                if (waitlistEntry.Status == "seated")
+                if (dto.WaitlistId.StartsWith("res-", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new BusinessValidationException($"Waitlist entry '{dto.WaitlistId}' is already marked as seated.");
+                    var reservation = _reservations.FirstOrDefault(r => r.Id == dto.WaitlistId)
+                        ?? throw new NotFoundException($"Reservation '{dto.WaitlistId}' not found.");
+                    if (reservation.Status == "seated")
+                    {
+                        throw new BusinessValidationException($"Reservation '{dto.WaitlistId}' is already marked as seated.");
+                    }
+                    reservation.Status = "seated";
+                    table.PartyName = reservation.PartyName;
                 }
-
-                waitlistEntry.Status = "seated";
-                table.PartyName = waitlistEntry.PartyName;
+                else
+                {
+                    var waitlistEntry = _waitlist.FirstOrDefault(w => w.Id == dto.WaitlistId)
+                        ?? throw new NotFoundException($"Waitlist entry '{dto.WaitlistId}' not found.");
+                    if (waitlistEntry.Status == "seated")
+                    {
+                        throw new BusinessValidationException($"Waitlist entry '{dto.WaitlistId}' is already marked as seated.");
+                    }
+                    waitlistEntry.Status = "seated";
+                    table.PartyName = waitlistEntry.PartyName;
+                }
             }
             else
             {
@@ -498,6 +511,16 @@ public class InMemoryTurnTableStore : ITurnTableService
             // 4. Clear the roation queue
             _rotationQueue.Clear();
 
+            // 5. Complete today's leftover booked reservations
+            var todayUtc = DateTimeOffset.UtcNow.Date;
+            foreach (var res in _reservations)
+            {
+                if (res.ReservationTime.Date == todayUtc && res.Status == "booked")
+                {
+                    res.Status = "no_show";
+                }
+            }
+
             return Task.CompletedTask;
         }
     }
@@ -696,7 +719,8 @@ public class InMemoryTurnTableStore : ITurnTableService
             PhoneNumber = entry.PhoneNumber,
             CheckedInAt = entry.CheckedInAt,
             QuotedWaitInMinutes = entry.QuotedWaitInMinutes,
-            Status = entry.Status
+            Status = entry.Status,
+            IsReservationArrival = entry.IsReservationArrival
         };
     }
 
@@ -714,6 +738,94 @@ public class InMemoryTurnTableStore : ITurnTableService
             Active = server.Active,
             Section = server.Section
         };
+    }
+
+        private static ReservationDto MapToReservationDto(Reservation r)
+    {
+        return new ReservationDto
+        {
+            Id = r.Id,
+            PartyName = r.PartyName,
+            PartySize = r.PartySize,
+            PhoneNumber = r.PhoneNumber,
+            ReservationTime = r.ReservationTime,
+            Status = r.Status
+        };
+    }
+
+    /// <inheritdoc />
+    public Task<IEnumerable<ReservationDto>> GetTodayReservationsAsync()
+    {
+        lock (_lock)
+        {
+            var todayUtc = DateTimeOffset.UtcNow.Date;
+            var list = _reservations
+                .Where(r => r.ReservationTime.Date == todayUtc && (r.Status == "booked" || r.Status == "no_show"))
+                .OrderBy(r => r.ReservationTime)
+                .Select(MapToReservationDto);
+
+            return Task.FromResult(list);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<ReservationDto> AddReservationAsync(CreateReservationDto dto)
+    {
+        lock (_lock)
+        {
+            var res = new Reservation
+            {
+                Id = $"res-{_reservations.Count + 101}",
+                PartyName = dto.PartyName,
+                PartySize = dto.PartySize,
+                PhoneNumber = dto.PhoneNumber,
+                ReservationTime = dto.ReservationTime,
+                Status = "booked"
+            };
+
+            _reservations.Add(res);
+            return Task.FromResult(MapToReservationDto(res));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<ReservationDto> UpdateReservationStatusAsync(string reservationId, string status)
+    {
+        lock (_lock)
+        {
+            var res = _reservations.FirstOrDefault(r => r.Id == reservationId)
+                ?? throw new NotFoundException($"Reservation '{reservationId}' not found.");
+
+            res.Status = status.ToLowerInvariant();
+            return Task.FromResult(MapToReservationDto(res));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<WaitlistEntryDto> MoveReservationToWaitlistAsync(string reservationId)
+    {
+        lock (_lock)
+        {
+            var res = _reservations.FirstOrDefault(r => r.Id == reservationId)
+                ?? throw new NotFoundException($"Reservation '{reservationId}' not found.");
+
+            res.Status = "canceled";
+
+            var entry = new WaitlistEntry
+            {
+                Id = $"wt-{_waitlist.Count + 201}",
+                PartyName = res.PartyName,
+                PartySize = res.PartySize,
+                PhoneNumber = res.PhoneNumber,
+                CheckedInAt = DateTimeOffset.UtcNow,
+                QuotedWaitInMinutes = 0,
+                IsReservationArrival = true,
+                Status = "waiting"
+            };
+
+            _waitlist.Add(entry);
+            return Task.FromResult(MapToWaitlistDto(entry));
+        }
     }
 
     #endregion

@@ -39,4 +39,9 @@ public class WaitlistEntry
     /// Gets or sets the status of the waitlist entry (ex: "waiting", "contacted", "seated", "canceled", "no_show").
     /// </summary>
     public string Status { get; set; } = "waiting";
+
+    /// <summary>
+    /// Indicates if this waitlist entry was originally a reservation arrival (to sort at the top of the queue).
+    /// </summary>
+    public bool IsReservationArrival { get; set; } = false;
 }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TurnTable.Api.Data;
@@ -11,9 +12,11 @@ using TurnTable.Api.Data;
 namespace TurnTable.Api.Migrations
 {
     [DbContext(typeof(TurnTableDbContext))]
-    partial class TurnTableDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260827175814_AddReservations")]
+    partial class AddReservations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -275,9 +278,6 @@ namespace TurnTable.Api.Migrations
 
                     b.Property<DateTimeOffset>("CheckedInAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsReservationArrival")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("PartyName")
                         .IsRequired()

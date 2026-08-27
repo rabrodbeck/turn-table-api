@@ -115,5 +115,37 @@ public interface ITurnTableService
     Task ResetShiftAsync();
 
     #endregion
+
+    #region 
+
+    /// <summary>
+    /// Retrieves all reservations scheduled for today.
+    /// </summary>
+    /// <returns></returns>
+    Task<IEnumerable<ReservationDto>> GetTodayReservationsAsync();
+
+    /// <summary>
+    /// Adds a new reservation for today or a future date.
+    /// </summary>
+    /// <param name="dto"></param>
+    /// <returns></returns>
+    Task<ReservationDto> AddReservationAsync(CreateReservationDto dto);
+
+    /// <summary>
+    /// Updates the status of an existing reservation (ex: booked, seated, no_show, canceled).
+    /// </summary>
+    /// <param name="reservationId"></param>
+    /// <param name="status"></param>
+    /// <returns></returns>
+    Task<ReservationDto> UpdateReservationStatusAsync(string reservationId, string status);
+
+    /// <summary>
+    /// Cancel today's reservation and transfer the party to the top of the active waitlist.
+    /// </summary>
+    /// <param name="reservationId"></param>
+    /// <returns></returns>
+    Task<WaitlistEntryDto> MoveReservationToWaitlistAsync(string reservationId);
+
+    #endregion
     
 }

@@ -81,7 +81,10 @@ public class Program
         app.UseCors("AllowFrontendApp");
 
         // 8. HTTPS Redirection & Authorization
-        app.UseHttpsRedirection();
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseHttpsRedirection();   
+        }
         app.UseAuthorization();
 
         // 9. Map Controller Endpoints
